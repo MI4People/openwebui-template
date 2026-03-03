@@ -1,0 +1,64 @@
+services:
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: always
+    container_name: openwebui
+    expose:
+      - "8080"
+    environment:
+      - WEBUI_URL=https://YOUR_DOMAIN_HERE
+      - WEBUI_SECRET_KEY=CHANGE_ME_TO_A_LONG_RANDOM_SECRET
+      - ENABLE_SIGNUP=false
+      - ENABLE_PERSISTENT_CONFIG=true
+      - WEBUI_ADMIN_EMAIL=YOUR_OPENWEBUI_ADMIN_EMAIL
+      - WEBUI_ADMIN_PASSWORD=CHANGE_ME_OPENWEBUI_ADMIN_PASSWORD
+      - DATABASE_URL=postgresql://openwebui:CHANGE_ME_DB_PASSWORD@postgres:5432/openwebui
+    depends_on:
+      - postgres
+    volumes:
+      - ./storage/openwebui:/app/backend/data
+    networks:
+      - proxy
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    container_name: openwebui-postgres
+    environment:
+      - POSTGRES_DB=openwebui
+      - POSTGRES_USER=openwebui
+      - POSTGRES_PASSWORD=CHANGE_ME_DB_PASSWORD
+      - TZ=Europe/Berlin
+    volumes:
+      - ./storage/postgres:/var/lib/postgresql/data
+    networks:
+      - proxy
+
+  nginx:
+    image: nginx:latest
+    restart: always
+    container_name: openwebui-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/certbot/www:/var/www/certbot
+      - ./nginx/certbot/conf:/etc/letsencrypt
+    depends_on:
+      - openwebui
+    networks:
+      - proxy
+
+  certbot:
+    image: certbot/certbot
+    container_name: openwebui-certbot
+    volumes:
+      - ./nginx/certbot/www:/var/www/certbot
+      - ./nginx/certbot/conf:/etc/letsencrypt
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    driver: bridge
