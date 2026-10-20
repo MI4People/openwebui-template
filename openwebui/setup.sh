@@ -109,4 +109,8 @@ CRON_BACKUP="0 1 * * * /bin/bash /root/openwebui/openwebui_backup.sh"
   echo "$CRON_BACKUP"
 } | crontab -
 
+echo "Installing update command..."
+chmod +x /root/openwebui/update.sh
+ln -sf /root/openwebui/update.sh /usr/local/bin/openwebui-update
+
 printf "\nSetup complete.\n" > /dev/tty
