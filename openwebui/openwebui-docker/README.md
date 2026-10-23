@@ -108,3 +108,42 @@ Nightly PostgreSQL backup at 1am:
 ```bash
 0 1 * * * /bin/bash /root/openwebui/openwebui_backup.sh
 ```
+
+## 8) Updates
+
+`/root/openwebui/update.sh` (nach dem Setup auch als Befehl `openwebui-update`) aktualisiert Open WebUI:
+
+- wählt automatisch die neueste stabile Version, die mindestens 7 Tage alt ist (nie ein Downgrade)
+- löscht vorher ungenutzte Images und prüft den Speicherplatz
+- sichert die Datenbank über `openwebui_backup.sh` (Vektordaten werden nicht gesichert)
+- startet die neue Version und prüft den Health-Check
+- spielt bei einem Fehler Datenbank und alte Version automatisch zurück
+- startet nginx nach dem Update neu (sonst 502, weil nginx die alte Container-IP behält)
+- löscht alte Images erst nach erfolgreichem Update
+- schreibt alles nach `/root/openwebui/update.log`
+
+Die eingestellte Version steht in `openwebui-docker/.env` (`OPENWEBUI_VERSION`). Ohne Eintrag gilt `main`.
+Bestehende Installationen mit festem `:main` in der `docker-compose.yml` werden beim ersten Lauf automatisch umgestellt.
+
+```bash
+openwebui-update                    # mit Rückfrage
+openwebui-update --check            # nur prüfen, ob ein Update fällig ist
+openwebui-update --version v0.9.5   # bestimmte Version erzwingen
+```
+
+Bestehende Server einmalig nachrüsten:
+
+```bash
+chmod +x /root/openwebui/update.sh
+ln -sf /root/openwebui/update.sh /usr/local/bin/openwebui-update
+```
+
+### Anleitung für Kund:innen
+
+1. In der Hetzner Cloud Console den Server öffnen und auf **Konsole** (`>_`) klicken.
+2. Als `root` anmelden.
+3. `openwebui-update` eintippen, Enter, Frage mit `j` bestätigen.
+4. Warten bis „Fertig“ erscheint (meist 3 bis 5 Minuten), dann im Browser anmelden und eine Frage stellen.
+
+„Ihr seid auf dem aktuellen Stand“ heißt: nichts zu tun.
+Ein roter **FEHLER** heißt: Die alte Version läuft weiter. Bitte `update.log` oder ein Foto des Bildschirms schicken.

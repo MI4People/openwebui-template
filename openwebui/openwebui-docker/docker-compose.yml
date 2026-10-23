@@ -1,6 +1,6 @@
 services:
   openwebui:
-    image: ghcr.io/open-webui/open-webui:main
+    image: ghcr.io/open-webui/open-webui:${OPENWEBUI_VERSION:-main}
     restart: always
     container_name: openwebui
     logging:
