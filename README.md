@@ -8,6 +8,8 @@ This repository contains a ready-to-use deployment template in [`openwebui/`](./
 - Let's Encrypt TLS certificates via Certbot
 - Automated certificate renewal
 - Automated PostgreSQL backups
+- Automatic OS security updates
+- One-command updates (`openwebui-update`) with rollback
 
 ## What This Template Does
 
@@ -19,6 +21,7 @@ The template is designed for a fresh Linux server and provides scripts to:
 4. Issue the first TLS certificate.
 5. Enable HTTPS in Nginx.
 6. Install cron jobs for renewal and backups.
+7. Enable automatic security updates and install the `openwebui-update` command.
 
 ## Repository Structure
 
@@ -28,8 +31,10 @@ openwebui/
 ├── setup.sh                         # Run on server for first-time setup
 ├── openwebui_backup.sh              # Database backup script
 ├── update.sh                        # Update with automatic version pick and rollback
+├── auto-updates.sh                  # Enables automatic OS security updates (called by setup.sh)
 ├── docs/
-│   └── technical-documentation.md   # Detailed architecture/ops notes
+│   ├── technical-documentation.md   # Detailed architecture/ops notes
+│   └── nachruestung-bestehender-server.md  # Retrofitting existing customer servers (German)
 └── openwebui-docker/
     ├── docker-compose.yml
     ├── .env                         # Created by fill-template.sh (secrets, git-ignored)
@@ -42,7 +47,8 @@ openwebui/
 ## Prerequisites
 
 - A domain name pointing to your server IP
-- A fresh Linux server with root access
+- A fresh Ubuntu or Debian server with root access
+- At least **80 GB** disk (40 GB is not enough once vector data, the embedding model cache and a second Open WebUI image during updates come together)
 - Ports `80` and `443` open in firewall/security group
 - `bash`, `perl`, and `openssl` available on the machine where you run `fill-template.sh`
 
@@ -129,6 +135,7 @@ cd /root/openwebui
 - Issue initial TLS certificate
 - Reload Nginx with HTTPS enabled
 - Add cron jobs for renewal and backups
+- Enable automatic security updates (`auto-updates.sh`)
 - Install the `openwebui-update` command
 
 ## Access
@@ -165,11 +172,19 @@ Defined in `openwebui/openwebui-docker/docker-compose.yml`:
 - Output: `/root/openwebui/backups/openwebui_*.sql.gz`
 - Log: `/root/openwebui/backup.log`
 - Retention: backups older than 7 days are deleted
+- These backups live on the same disk as the data. Enable Hetzner Backups or regular snapshots in addition, so a lost or broken disk does not take the backups with it.
+
+### Automatic Security Updates
+
+- Script: `openwebui/auto-updates.sh` (run by `setup.sh`, safe to run again)
+- Uses `unattended-upgrades` with security sources only; Docker packages are never updated automatically
+- Installs daily at 03:30 and reboots at 04:00 only if an update requires it
 
 ### Updates
 
 - Script: `openwebui/update.sh`, after setup also available as `openwebui-update`
-- Picks the newest stable Open WebUI release that is at least 7 days old, backs up the database, starts the new version and rolls back automatically on failure
+- Installs all pending OS updates first (including Docker), then picks the newest stable Open WebUI release that is at least 7 days old, backs up the database, starts the new version and rolls back automatically on failure
+- If the OS needs a reboot afterwards it asks (with `-y` it reboots directly); Open WebUI is then unavailable for 1 to 2 minutes
 - `openwebui-update --check` only reports whether an update is due and changes nothing
 - Log: `/root/openwebui/update.log`
 - Details: [`openwebui/openwebui-docker/README.md`](./openwebui/openwebui-docker/README.md)
@@ -180,6 +195,8 @@ Defined in `openwebui/openwebui-docker/docker-compose.yml`:
 - The template sets `ENABLE_SIGNUP=false` by default.
 - Secrets live only in `openwebui/openwebui-docker/.env`. Keep a copy in a password manager or vault; without it the database password is lost.
 - Installations created before the `.env` change keep their secrets in `docker-compose.yml`. Do not replace that file on such servers without first moving the values into `.env`.
+- Nginx resolves the `openwebui` container on every request (Docker DNS), so a recreated or restarted container never causes 502 Bad Gateway.
+- Existing servers set up before these changes: see [`openwebui/docs/nachruestung-bestehender-server.md`](./openwebui/docs/nachruestung-bestehender-server.md).
 - Persistent data is stored under:
   - `openwebui/openwebui-docker/storage/openwebui`
   - `openwebui/openwebui-docker/storage/postgres`
@@ -190,3 +207,4 @@ For technical/architecture details, see:
 
 - [`openwebui/docs/technical-documentation.md`](./openwebui/docs/technical-documentation.md)
 - [`openwebui/openwebui-docker/README.md`](./openwebui/openwebui-docker/README.md)
+- [`openwebui/docs/nachruestung-bestehender-server.md`](./openwebui/docs/nachruestung-bestehender-server.md)

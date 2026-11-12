@@ -143,6 +143,9 @@ CRON_BACKUP="0 1 * * * /bin/bash $SERVER_DIR/openwebui_backup.sh"
   echo "$CRON_BACKUP"
 } | crontab -
 
+echo "Enabling automatic security updates..."
+bash "$SERVER_DIR/auto-updates.sh"
+
 echo "Installing update command..."
 chmod +x "$SERVER_DIR/update.sh"
 ln -sf "$SERVER_DIR/update.sh" /usr/local/bin/openwebui-update

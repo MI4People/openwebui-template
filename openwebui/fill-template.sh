@@ -21,7 +21,6 @@ FILES_EMAIL=(
   "$COMPOSE_DIR/README.md"
 )
 
-FILE_COMPOSE="$COMPOSE_DIR/docker-compose.yml"
 ENV_FILE="$COMPOSE_DIR/.env"
 
 # Secrets landen in openwebui-docker/.env (von Git ignoriert), nicht in
