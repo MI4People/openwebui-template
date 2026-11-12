@@ -13,25 +13,26 @@ Run the template helper to:
 ```
 
 This updates:
-- `openwebui-docker/docker-compose.yml`
+- `openwebui-docker/.env` (secrets and admin email, created by the script, ignored by git)
+- `openwebui-docker/docker-compose.yml` (domain)
 - `openwebui-docker/nginx/conf.d/openwebui.conf`
 - `openwebui-docker/issue-cert.sh`
 - `openwebui-docker/README.md`
-- `template/openwebui/docs/technical-documentation.md`
+- `docs/technical-documentation.md`
 
 ## 2) Set Secrets (Local, Before Deploy)
 
-`fill-template.sh` generates and injects these values in `openwebui-docker/docker-compose.yml`:
-- `WEBUI_SECRET_KEY=CHANGE_ME_TO_A_LONG_RANDOM_SECRET`
-- `POSTGRES_PASSWORD=CHANGE_ME_DB_PASSWORD`
-- `DATABASE_URL=...:CHANGE_ME_DB_PASSWORD@...`
-- `WEBUI_ADMIN_PASSWORD=CHANGE_ME_OPENWEBUI_ADMIN_PASSWORD`
+`fill-template.sh` generates these values and writes them to `openwebui-docker/.env`:
+- `WEBUI_SECRET_KEY`
+- `POSTGRES_PASSWORD` (also used in `DATABASE_URL`)
+- `WEBUI_ADMIN_EMAIL` (asked for)
+- `WEBUI_ADMIN_PASSWORD`
 
-It also asks for and injects:
-- `WEBUI_ADMIN_EMAIL=YOUR_OPENWEBUI_ADMIN_EMAIL`
+`docker-compose.yml` only references them as `${...}`, so no secret is stored in a versioned file.
+Docker Compose stops with an error if one of them is missing.
+`fill-template.sh` will not overwrite an existing `.env` that already contains secrets.
 
-Review the generated values before deployment (the placeholders should be gone after running `./fill-template.sh`).
-`setup.sh` also validates this and will stop if placeholders are still present.
+`setup.sh` stops if placeholders are still present or `.env` is missing a value.
 
 ## 3) First Login / Admin Account
 
@@ -51,20 +52,23 @@ Important:
 
 ## 4) Server Setup (After Copying to `/root/openwebui`)
 
-After copying the entire `template/openwebui` folder to `/root/openwebui` on a fresh server, run:
+After copying the entire `openwebui` folder (including `openwebui-docker/.env`) to `/root/openwebui` on a fresh server, run:
 
 ```bash
 /root/openwebui/setup.sh
 ```
 
 This script performs:
+- Checks for leftover placeholders and a complete `.env`
 - OS update + installs `curl`, `git`, and `ufw`
+- Enables `ufw` for the current SSH port, `80` and `443`
 - Docker installation and service enable/start
 - Temporarily disables the HTTPS block in Nginx for HTTP-01 validation
 - Starts the Docker Compose stack
 - Issues the initial TLS certificate via `issue-cert.sh`
 - Re-enables HTTPS and reloads Nginx
 - Adds cron jobs for nightly certificate renewal and PostgreSQL backups
+- Installs the `openwebui-update` command
 
 ## 5) Services Included
 
@@ -127,7 +131,7 @@ Bestehende Installationen mit festem `:main` in der `docker-compose.yml` werden 
 
 ```bash
 openwebui-update                    # mit Rückfrage
-openwebui-update --check            # nur prüfen, ob ein Update fällig ist
+openwebui-update --check            # nur prüfen, ob ein Update fällig ist (ändert nichts)
 openwebui-update --version v0.9.5   # bestimmte Version erzwingen
 ```
 

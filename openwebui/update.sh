@@ -172,11 +172,15 @@ cd "$COMPOSE_DIR"
 
 # Einmalige Umstellung alter Installationen von festem ":main" auf die Variable
 if grep -q 'open-webui/open-webui:main' "$COMPOSE_FILE"; then
-  cp "$COMPOSE_FILE" "$COMPOSE_FILE.vor-update-umstellung"
-  sed -i 's|open-webui/open-webui:main|open-webui/open-webui:${OPENWEBUI_VERSION:-main}|' "$COMPOSE_FILE"
-  ok "docker-compose.yml auf steuerbare Version umgestellt (Kopie: docker-compose.yml.vor-update-umstellung)"
+  if [ "$CHECK_ONLY" = 1 ]; then
+    warn "docker-compose.yml nutzt noch festes ':main'. Wird beim echten Update umgestellt (Prüfmodus ändert nichts)."
+  else
+    cp "$COMPOSE_FILE" "$COMPOSE_FILE.vor-update-umstellung"
+    sed -i 's|open-webui/open-webui:main|open-webui/open-webui:${OPENWEBUI_VERSION:-main}|' "$COMPOSE_FILE"
+    ok "docker-compose.yml auf steuerbare Version umgestellt (Kopie: docker-compose.yml.vor-update-umstellung)"
+  fi
 fi
-grep -q 'OPENWEBUI_VERSION' "$COMPOSE_FILE" \
+[ "$CHECK_ONLY" = 1 ] || grep -q 'OPENWEBUI_VERSION' "$COMPOSE_FILE" \
   || fail "docker-compose.yml nutzt kein OPENWEBUI_VERSION. Bitte Image-Zeile prüfen."
 ok "Docker erreichbar"
 

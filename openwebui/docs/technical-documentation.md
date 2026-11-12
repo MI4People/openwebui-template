@@ -116,9 +116,16 @@ Cron schedule:
 ## Directory Structure (Server)
 - `/root/openwebui/`
   - `openwebui-docker/` (Compose files, Nginx config, Certbot config)
+  - `openwebui-docker/.env` (secrets and `OPENWEBUI_VERSION`, mode `600`, not in git)
   - `openwebui_backup.sh` (database backup script)
+  - `update.sh` (update with version pick and rollback, linked as `openwebui-update`)
+  - `update.log` (update execution log)
   - `backups/` (database dumps)
   - `backup.log` (backup execution log)
+
+## Secrets
+- `WEBUI_SECRET_KEY`, `POSTGRES_PASSWORD`, `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` are stored only in `openwebui-docker/.env`.
+- `docker-compose.yml` references them as `${...}` and fails if one is missing.
 
 ## Notes
 - Persistent data is stored on the host filesystem to ensure data survives container restarts.

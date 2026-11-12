@@ -27,10 +27,12 @@ openwebui/
 ├── fill-template.sh                 # Run locally to replace placeholders and generate secrets
 ├── setup.sh                         # Run on server for first-time setup
 ├── openwebui_backup.sh              # Database backup script
+├── update.sh                        # Update with automatic version pick and rollback
 ├── docs/
 │   └── technical-documentation.md   # Detailed architecture/ops notes
 └── openwebui-docker/
     ├── docker-compose.yml
+    ├── .env                         # Created by fill-template.sh (secrets, git-ignored)
     ├── issue-cert.sh
     ├── renew-cert.sh
     ├── README.md
@@ -68,7 +70,10 @@ It also generates:
 - PostgreSQL password
 - OpenWebUI admin password
 
-`fill-template.sh` writes values into:
+`fill-template.sh` writes the secrets and the admin email into `openwebui/openwebui-docker/.env`.
+This file is ignored by git, so passwords never end up in a commit. It refuses to overwrite an existing `.env` with secrets.
+
+Domain and Let's Encrypt email are written into:
 
 - `openwebui/openwebui-docker/docker-compose.yml`
 - `openwebui/openwebui-docker/nginx/conf.d/openwebui.conf`
@@ -76,7 +81,7 @@ It also generates:
 - `openwebui/openwebui-docker/README.md`
 - `openwebui/docs/technical-documentation.md`
 
-After it finishes, verify placeholders are gone in the deployment-critical files:
+After it finishes, verify that `openwebui/openwebui-docker/.env` exists and that placeholders are gone in the deployment-critical files:
 
 - `openwebui/openwebui-docker/docker-compose.yml`
 - `openwebui/openwebui-docker/nginx/conf.d/openwebui.conf`
@@ -87,15 +92,12 @@ Specifically check these placeholder strings are no longer present:
 - `YOUR_DOMAIN_HERE`
 - `YOUR_LETSENCRYPT_EMAIL`
 - `YOUR_OPENWEBUI_ADMIN_EMAIL`
-- `CHANGE_ME_TO_A_LONG_RANDOM_SECRET`
-- `CHANGE_ME_DB_PASSWORD`
-- `CHANGE_ME_OPENWEBUI_ADMIN_PASSWORD`
 
 `fill-template.sh` also prints the initial OpenWebUI admin login (email + generated password). Save this output securely (password manager, vault, or encrypted notes), because you will need it to log in to the web interface as admin.
 
 ### 2) Copy the template to server
 
-Copy the whole `openwebui/` directory to:
+Copy the whole `openwebui/` directory (including the hidden `openwebui-docker/.env`) to:
 
 ```text
 /root/openwebui
@@ -119,12 +121,15 @@ cd /root/openwebui
 
 `setup.sh` will:
 
+- Check that placeholders are gone and `.env` contains all secrets
 - Install/update packages (`curl`, `git`, `ufw`)
+- Enable the firewall (`ufw`) for SSH, `80` and `443`
 - Install and start Docker
 - Start containers
 - Issue initial TLS certificate
 - Reload Nginx with HTTPS enabled
 - Add cron jobs for renewal and backups
+- Install the `openwebui-update` command
 
 ## Access
 
@@ -161,10 +166,20 @@ Defined in `openwebui/openwebui-docker/docker-compose.yml`:
 - Log: `/root/openwebui/backup.log`
 - Retention: backups older than 7 days are deleted
 
+### Updates
+
+- Script: `openwebui/update.sh`, after setup also available as `openwebui-update`
+- Picks the newest stable Open WebUI release that is at least 7 days old, backs up the database, starts the new version and rolls back automatically on failure
+- `openwebui-update --check` only reports whether an update is due and changes nothing
+- Log: `/root/openwebui/update.log`
+- Details: [`openwebui/openwebui-docker/README.md`](./openwebui/openwebui-docker/README.md)
+
 ## Notes and Caveats
 
 - The admin bootstrap (`WEBUI_ADMIN_EMAIL` + `WEBUI_ADMIN_PASSWORD`) is only used on first startup with an empty database.
 - The template sets `ENABLE_SIGNUP=false` by default.
+- Secrets live only in `openwebui/openwebui-docker/.env`. Keep a copy in a password manager or vault; without it the database password is lost.
+- Installations created before the `.env` change keep their secrets in `docker-compose.yml`. Do not replace that file on such servers without first moving the values into `.env`.
 - Persistent data is stored under:
   - `openwebui/openwebui-docker/storage/openwebui`
   - `openwebui/openwebui-docker/storage/postgres`
