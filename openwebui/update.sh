@@ -123,19 +123,30 @@ set_tag() {
   fi
 }
 
-# Neueste stabile Version, die mindestens MIN_AGE_DAYS alt ist
+# Stabile Releases auswerten. Ausgabe (eine Zeile, durch | getrennt):
+#   Ziel | Neueste | Neueste veröffentlicht am | Neueste installierbar ab
+# Ziel = neueste stabile Version, die mindestens MIN_AGE_DAYS alt ist.
+# Neueste = neueste stabile Version überhaupt (die zeigt auch der Hinweis in Open WebUI).
 pick_release() {
   curl -fsS --max-time 20 -H "Accept: application/vnd.github+json" "$RELEASES_URL" \
     | python3 -c '
 import json, sys, datetime
 min_age = datetime.timedelta(days=int(sys.argv[1]))
 now = datetime.datetime.now(datetime.timezone.utc)
+target = newest = newest_pub = newest_ready = ""
 for r in json.load(sys.stdin):
     if r.get("draft") or r.get("prerelease"):
         continue
     pub = datetime.datetime.fromisoformat(r["published_at"].replace("Z", "+00:00"))
+    if not newest:
+        newest = r["tag_name"]
+        newest_pub = pub.strftime("%d.%m.%Y")
+        newest_ready = (pub + min_age).strftime("%d.%m.%Y")
     if now - pub >= min_age:
-        print(r["tag_name"]); break
+        target = r["tag_name"]
+        break
+if newest:
+    print("|".join([target, newest, newest_pub, newest_ready]))
 ' "$MIN_AGE_DAYS"
 }
 
@@ -252,6 +263,8 @@ PREV_TAG="$(configured_tag)"
 CURRENT="$(running_version)"
 APP_UPDATE=0
 TARGET=""
+NEWEST=""
+PENDING_MSG=""
 echo "  Eingestellt:  $PREV_TAG"
 echo "  Läuft:        ${CURRENT:-unbekannt (App läuft gerade nicht)}"
 
@@ -260,10 +273,13 @@ if [ -n "$FORCED_VERSION" ]; then
   APP_UPDATE=1
   warn "Version manuell vorgegeben: $TARGET"
 else
-  TARGET="$(pick_release || true)"
-  if [ -z "$TARGET" ]; then
+  RELEASE_INFO="$(pick_release || true)"
+  IFS='|' read -r TARGET NEWEST NEWEST_PUB NEWEST_READY <<< "$RELEASE_INFO"
+  if [ -z "$RELEASE_INFO" ]; then
     # Systemupdates sollen nicht an einer gerade nicht erreichbaren GitHub-API scheitern.
     warn "Liste der Open-WebUI-Versionen nicht abrufbar. Open WebUI wird diesmal nicht aktualisiert."
+  elif [ -z "$TARGET" ]; then
+    warn "Keine Open-WebUI-Version ist älter als $MIN_AGE_DAYS Tage. Open WebUI wird diesmal nicht aktualisiert."
   else
     echo "  Ziel:         $TARGET (neueste Version, die älter als $MIN_AGE_DAYS Tage ist)"
     if [ -n "$CURRENT" ] && ! is_newer "$TARGET" "$CURRENT"; then
@@ -273,6 +289,12 @@ else
     else
       APP_UPDATE=1
     fi
+  fi
+  # Der Hinweis in Open WebUI zeigt neue Versionen sofort, installiert wird erst nach
+  # MIN_AGE_DAYS Tagen. Das erklären, damit "aktueller Stand" nicht verwirrt.
+  if [ -n "$NEWEST" ] && [ "$NEWEST" != "$TARGET" ] && is_newer "$NEWEST" "${CURRENT:-0}"; then
+    PENDING_MSG="Version $NEWEST wurde am $NEWEST_PUB veröffentlicht und wird zur Sicherheit erst ab dem $NEWEST_READY installiert. Der Hinweis in Open WebUI zeigt sie schon jetzt an. Bitte ab dem $NEWEST_READY erneut openwebui-update ausführen."
+    echo "  Neueste:      $NEWEST (veröffentlicht am $NEWEST_PUB, installierbar ab $NEWEST_READY)"
   fi
 fi
 
@@ -301,6 +323,7 @@ fi
 if [ "$APP_UPDATE" != 1 ] && [ "$SYS_COUNT" -eq 0 ]; then
   echo
   ok "Ihr seid auf dem aktuellen Stand. Kein Update nötig."
+  [ -z "$PENDING_MSG" ] || echo "  $PENDING_MSG"
   if [ "$CHECK_ONLY" != 1 ]; then
     docker image prune -a -f >/dev/null 2>&1 || true
     offer_reboot
@@ -313,6 +336,7 @@ if [ "$CHECK_ONLY" = 1 ]; then
   echo "Prüfmodus, nichts geändert. Fällig wäre:"
   [ "$APP_UPDATE" = 1 ] && echo "  - Open WebUI von ${CURRENT:-$PREV_TAG} auf $TARGET"
   [ "$SYS_COUNT" -gt 0 ] && echo "  - $SYS_COUNT Systempakete"
+  [ -z "$PENDING_MSG" ] || echo "  $PENDING_MSG"
   exit 0
 fi
 
@@ -354,6 +378,7 @@ if [ "$APP_UPDATE" != 1 ]; then
   docker image prune -a -f >/dev/null 2>&1 || true
   step "Fertig"
   echo "  Open WebUI:       ${CURRENT:-$PREV_TAG} (unverändert)"
+  [ -z "$PENDING_MSG" ] || echo "  $PENDING_MSG"
   echo "  Systempakete:     $SYS_COUNT aktualisiert"
   echo "  Freier Speicher:  $(free_gb) GB"
   offer_reboot
@@ -446,6 +471,7 @@ echo "  Version jetzt:    ${NEW_VERSION:-$TARGET}"
 echo "  Systempakete:     $SYS_COUNT aktualisiert"
 echo "  Freier Speicher:  $(free_gb) GB"
 echo "  Backup:           $BACKUP_FILE"
+[ -z "$PENDING_MSG" ] || echo "  $PENDING_MSG"
 offer_reboot
 echo
 echo "Bitte kurz im Browser prüfen: Anmelden, einen Chat öffnen, eine Frage stellen."

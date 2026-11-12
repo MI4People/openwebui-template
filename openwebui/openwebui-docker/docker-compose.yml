@@ -15,8 +15,6 @@ services:
       - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:?fehlt in .env, bitte fill-template.sh ausfuehren}
       - ENABLE_SIGNUP=false
       - ENABLE_PERSISTENT_CONFIG=true
-      # Kein "Neue Version verfügbar"-Banner: Updates laufen über openwebui-update
-      - ENABLE_VERSION_UPDATE_CHECK=false
       - WEBUI_ADMIN_EMAIL=${WEBUI_ADMIN_EMAIL:?fehlt in .env, bitte fill-template.sh ausfuehren}
       - WEBUI_ADMIN_PASSWORD=${WEBUI_ADMIN_PASSWORD:?fehlt in .env, bitte fill-template.sh ausfuehren}
       - DATABASE_URL=postgresql://openwebui:${POSTGRES_PASSWORD:?fehlt in .env, bitte fill-template.sh ausfuehren}@postgres:5432/openwebui

@@ -8,7 +8,6 @@ Am Ende hat der Server:
 - den Befehl `openwebui-update` (Systemupdates, Open-WebUI-Update, Rollback, bei Bedarf Neustart)
 - automatische Sicherheitsupdates mit Neustart um 04:00, falls nötig
 - eine nginx-Konfiguration, die nach Updates, Reboots oder Abstürzen kein 502 mehr liefert
-- kein Update-Banner mehr in Open WebUI
 - nginx auf fester Hauptversion statt `latest`
 
 > **Wichtig:** Auf alten Servern stehen die Passwörter direkt in der `docker-compose.yml`.
@@ -72,11 +71,14 @@ Die Sicherheitskopie liegt bewusst nicht in `conf.d`, weil nginx dort jede Datei
 cd /root/openwebui/openwebui-docker
 cp -n docker-compose.yml docker-compose.yml.vor-nachruestung
 sed -i 's|image: nginx:latest|image: nginx:1.30|' docker-compose.yml
-grep -q ENABLE_VERSION_UPDATE_CHECK docker-compose.yml || \
-  sed -i 's|^\([[:space:]]*\)- ENABLE_PERSISTENT_CONFIG=true$|&\n\1- ENABLE_VERSION_UPDATE_CHECK=false|' docker-compose.yml
+sed -i '/ENABLE_VERSION_UPDATE_CHECK=false/d' docker-compose.yml   # Update-Hinweis muss sichtbar bleiben
 grep -nE 'image: nginx|ENABLE_VERSION_UPDATE_CHECK' docker-compose.yml
 docker compose config -q && echo "Compose-Datei gültig"
 ```
+
+Erwartet: nur die Zeile `image: nginx:1.30`, kein `ENABLE_VERSION_UPDATE_CHECK`.
+Der Hinweis „Neue Version verfügbar“ in Open WebUI muss sichtbar bleiben: Er ist für Kund:innen der Auslöser, das Update zu starten.
+(Die `sed`-Zeile entfernt eine frühere Fassung dieses Schritts, die den Hinweis abgeschaltet hat.)
 
 Wirksam wird das beim nächsten `docker compose up -d`, spätestens beim ersten Update in Schritt 7.
 
@@ -92,7 +94,7 @@ bash /root/openwebui/auto-updates.sh
 openwebui-update
 ```
 
-Danach im Browser anmelden, einen Chat öffnen und eine Frage stellen. Das Update-Banner sollte nicht mehr erscheinen.
+Danach im Browser anmelden, einen Chat öffnen und eine Frage stellen.
 
 ## 8. Übergabe an Kund:innen
 
@@ -108,7 +110,7 @@ Danach im Browser anmelden, einen Chat öffnen und eine Frage stellen. Das Updat
 | 2. `update.sh` und `auto-updates.sh` kopiert | |
 | 3. `openwebui-update` angelegt | |
 | 4. nginx umgestellt, `nginx -t` erfolgreich | |
-| 5. nginx-Version und Update-Banner in Compose | |
+| 5. nginx-Version in Compose festgelegt | |
 | 6. Sicherheitsupdates eingerichtet | |
 | 7. Erstes Update erfolgreich, im Browser geprüft | |
 | 8. root-Passwort übergeben, Hetzner Backups an | |
