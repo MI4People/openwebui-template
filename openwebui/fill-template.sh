@@ -21,7 +21,16 @@ FILES_EMAIL=(
   "$COMPOSE_DIR/README.md"
 )
 
-FILE_COMPOSE="$COMPOSE_DIR/docker-compose.yml"
+ENV_FILE="$COMPOSE_DIR/.env"
+
+# Secrets landen in openwebui-docker/.env (von Git ignoriert), nicht in
+# versionierten Dateien. Eine vorhandene .env wird nie überschrieben, weil die
+# Datenbank sonst nicht mehr zum Passwort passt.
+if [ -f "$ENV_FILE" ] && grep -qE '^(WEBUI_SECRET_KEY|POSTGRES_PASSWORD|WEBUI_ADMIN_PASSWORD)=.+' "$ENV_FILE"; then
+  echo "ERROR: $ENV_FILE already contains secrets. Refusing to overwrite them." >&2
+  echo "Delete the file manually if you really want to generate new secrets." >&2
+  exit 1
+fi
 
 read -r -p "Enter domain (e.g., example.com): " DOMAIN
 while [ -z "${DOMAIN// }" ]; do
@@ -84,26 +93,27 @@ for file in "${FILES_EMAIL[@]}"; do
   fi
 done
 
-if [ -f "$FILE_COMPOSE" ]; then
-  perl -pi -e 's/YOUR_OPENWEBUI_ADMIN_EMAIL/$ENV{OPENWEBUI_ADMIN_EMAIL}/g' "$FILE_COMPOSE"
-fi
-
 if [ -n "$DOC_PATH" ] && [ -f "$DOC_PATH" ]; then
   perl -pi -e 's/YOUR_DOMAIN_HERE/$ENV{DOMAIN}/g' "$DOC_PATH"
   perl -pi -e 's/YOUR_SERVER_IP/$ENV{SERVER_IP}/g' "$DOC_PATH"
 fi
 
-if [ -f "$FILE_COMPOSE" ]; then
-  WEBUI_SECRET_KEY="$(generate_webui_secret)"
-  DB_PASSWORD="$(generate_db_password)"
-  OPENWEBUI_ADMIN_PASSWORD="$(generate_admin_password)"
-  export WEBUI_SECRET_KEY
-  export DB_PASSWORD
-  export OPENWEBUI_ADMIN_PASSWORD
-  perl -pi -e 's/CHANGE_ME_TO_A_LONG_RANDOM_SECRET/$ENV{WEBUI_SECRET_KEY}/g' "$FILE_COMPOSE"
-  perl -pi -e 's/CHANGE_ME_DB_PASSWORD/$ENV{DB_PASSWORD}/g' "$FILE_COMPOSE"
-  perl -pi -e 's/CHANGE_ME_OPENWEBUI_ADMIN_PASSWORD/$ENV{OPENWEBUI_ADMIN_PASSWORD}/g' "$FILE_COMPOSE"
-fi
+WEBUI_SECRET_KEY="$(generate_webui_secret)"
+DB_PASSWORD="$(generate_db_password)"
+OPENWEBUI_ADMIN_PASSWORD="$(generate_admin_password)"
+
+# Bestehende Einträge (z. B. OPENWEBUI_VERSION) bleiben erhalten.
+(
+  umask 077
+  touch "$ENV_FILE"
+  {
+    echo "WEBUI_SECRET_KEY=$WEBUI_SECRET_KEY"
+    echo "POSTGRES_PASSWORD=$DB_PASSWORD"
+    echo "WEBUI_ADMIN_EMAIL=$OPENWEBUI_ADMIN_EMAIL"
+    echo "WEBUI_ADMIN_PASSWORD=$OPENWEBUI_ADMIN_PASSWORD"
+  } >> "$ENV_FILE"
+)
+chmod 600 "$ENV_FILE"
 
 echo "Template fill complete."
 echo "Updated domain in:"
@@ -116,27 +126,19 @@ for file in "${FILES_EMAIL[@]}"; do
   [ -f "$file" ] && echo "  - $file"
 done
 
-if [ -f "$FILE_COMPOSE" ]; then
-  echo "Generated WEBUI_SECRET_KEY in:"
-  echo "  - $FILE_COMPOSE"
-  echo "Generated Postgres password in:"
-  echo "  - $FILE_COMPOSE"
-  echo "Configured OpenWebUI admin credentials in:"
-  echo "  - $FILE_COMPOSE"
-fi
+echo "Wrote secrets (WEBUI_SECRET_KEY, Postgres password, admin credentials) to:"
+echo "  - $ENV_FILE  (ignored by git, copy it to the server together with the rest)"
 
 if [ -n "$DOC_PATH" ] && [ -f "$DOC_PATH" ]; then
   echo "Updated documentation in:"
   echo "  - $DOC_PATH"
 else
-  echo "Warning: template/openwebui/docs/technical-documentation.md not found."
+  echo "Warning: docs/technical-documentation.md not found."
 fi
 
 echo
-echo "Reminder: review values in $COMPOSE_DIR/docker-compose.yml before production."
+echo "Reminder: review values in $COMPOSE_DIR/docker-compose.yml and $ENV_FILE before production."
 echo
 echo "OpenWebUI initial admin credentials (first startup with empty database only):"
 echo "  Email:    $OPENWEBUI_ADMIN_EMAIL"
-if [ -n "${OPENWEBUI_ADMIN_PASSWORD:-}" ]; then
-  echo "  Password: $OPENWEBUI_ADMIN_PASSWORD"
-fi
+echo "  Password: $OPENWEBUI_ADMIN_PASSWORD"

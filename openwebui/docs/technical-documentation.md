@@ -5,11 +5,11 @@ This system hosts an OpenWebUI application with PostgreSQL, fronted by Nginx and
 
 ## Hosting Environment
 - Provider: Hetzner
-- Server: `cx22` (adjust as needed)
-- vCPU: 2
-- RAM: 4 GB
-- Disk: 40 GB (local)
-- Snapshots: daily, trailing 7 days
+- Server: at least 80 GB disk recommended (e.g. `cx32`; `cx22` with 40 GB proved too small)
+- vCPU: 2+
+- RAM: 4 GB+
+- Disk: 80 GB (local). Space goes to two Open WebUI images during updates, the embedding model cache and vector data.
+- Backups/Snapshots: Hetzner Backups (daily, trailing 7 days) recommended in addition to the database dumps, which live on the same disk
 
 ## Network and Access
 - Public IP: `YOUR_SERVER_IP`
@@ -40,6 +40,8 @@ This system hosts an OpenWebUI application with PostgreSQL, fronted by Nginx and
 - **Nginx**
   - Listens on ports `80` and `443`.
   - Routes traffic for `YOUR_DOMAIN_HERE` to the `openwebui` service.
+  - Resolves `openwebui` via Docker DNS (`resolver 127.0.0.11`) on every request, so a recreated container (new IP) does not cause 502.
+  - Image pinned to a major version (`nginx:1.30`) instead of `latest`.
   - Serves `/.well-known/acme-challenge/` for Let's Encrypt validation.
 
 - **Certbot**
@@ -116,9 +118,23 @@ Cron schedule:
 ## Directory Structure (Server)
 - `/root/openwebui/`
   - `openwebui-docker/` (Compose files, Nginx config, Certbot config)
+  - `openwebui-docker/.env` (secrets and `OPENWEBUI_VERSION`, mode `600`, not in git)
   - `openwebui_backup.sh` (database backup script)
+  - `update.sh` (update with version pick and rollback, linked as `openwebui-update`)
+  - `update.log` (update execution log)
   - `backups/` (database dumps)
   - `backup.log` (backup execution log)
+
+## Operating System Updates
+- **Automatic security updates** via `unattended-upgrades`, set up by `auto-updates.sh`.
+  - Only Ubuntu/Debian security sources; Docker packages are blacklisted.
+  - Install at **03:30** (systemd drop-in for `apt-daily-upgrade.timer`), reboot at **04:00** only if required.
+  - Config files: `/etc/apt/apt.conf.d/21openwebui-auto-upgrades`, `/etc/apt/apt.conf.d/52openwebui-unattended-upgrades`.
+- **Full updates** (including Docker) run as part of `openwebui-update`, before the Open WebUI update. A pending reboot is offered at the end.
+
+## Secrets
+- `WEBUI_SECRET_KEY`, `POSTGRES_PASSWORD`, `WEBUI_ADMIN_EMAIL` and `WEBUI_ADMIN_PASSWORD` are stored only in `openwebui-docker/.env`.
+- `docker-compose.yml` references them as `${...}` and fails if one is missing.
 
 ## Notes
 - Persistent data is stored on the host filesystem to ensure data survives container restarts.
